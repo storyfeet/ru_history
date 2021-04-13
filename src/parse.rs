@@ -1,6 +1,7 @@
 use crate::*;
 use bogobble::*;
 
+#[derive(Debug)]
 pub enum Item {
     Hits(usize),
     Recent(usize),
@@ -9,7 +10,7 @@ pub enum Item {
 }
 
 parser! {(File->Vec<Item>)
-    (star(("\n ,".istar(),PItem).last()),EOI).first()
+    (star(("\n ,".istar(),PItem).last()),("\n ,".istar(),EOI)).first()
 }
 
 parser! {(PItem->Item)
@@ -30,5 +31,49 @@ parser! {(Quoted->String)
 }
 
 pub fn parse_onto(h: &mut HistoryStore, s: &str) -> anyhow::Result<()> {
+    let mut pr = File.parse_s(s).map_err(|e| e.strung())?.into_iter();
+    let mut cmd = read_to_command(&mut pr, &mut CommandData::new());
+
+    while let Some(c) = cmd {
+        match h.mp.get_mut(&c) {
+            Some(v) => cmd = read_to_command(&mut pr, v),
+            None => {
+                let mut cdat = CommandData::new();
+                let new_command = c.to_string();
+                cmd = read_to_command(&mut pr, &mut cdat);
+                h.mp.insert(new_command, cdat);
+            }
+        }
+    }
     Ok(())
+}
+
+pub fn read_to_command<I: Iterator<Item = Item>>(
+    i: &mut I,
+    cd: &mut CommandData,
+) -> Option<String> {
+    let mut hits = 0;
+    let mut recent = 0;
+    while let Some(c) = i.next() {
+        match c {
+            Item::Cmd(c) => return Some(c),
+            Item::Hits(h) => {
+                cd.hits += h;
+                hits = h;
+            }
+            Item::Recent(r) => recent = r,
+            Item::Path(p) => match cd.paths.insert(
+                p,
+                HistoryItem {
+                    changed: false,
+                    recent,
+                    hits,
+                },
+            ) {
+                Some(d) => cd.hits -= d.hits,
+                None => {}
+            },
+        }
+    }
+    None
 }

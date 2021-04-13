@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 pub struct CommandRes<'a> {
     cmd: &'a str,
     dat: &'a CommandData,
-    score: u64,
+    score: usize,
 }
 
 pub struct CommandList<'a> {

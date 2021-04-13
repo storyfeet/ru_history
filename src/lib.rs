@@ -8,30 +8,44 @@ use std::io::Write;
 use std::ops::Bound;
 use str_tools::traits::*;
 
+#[derive(Debug, PartialEq)]
 pub struct HistoryStore {
     mp: BTreeMap<String, CommandData>,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct CommandData {
     paths: BTreeMap<String, HistoryItem>,
     changed: bool,
-    recent: u64,
-    hits: u64,
+    recent: usize,
+    hits: usize,
 }
 
+#[derive(Debug, PartialEq)]
 pub struct HistoryItem {
     changed: bool,
-    recent: u64,
-    hits: u64,
+    recent: usize,
+    hits: usize,
 }
 
 impl HistoryStore {
-    pub fn add_cmd(&mut self, cmd: &str, dir: &str, time: u64) {
+    pub fn new() -> Self {
+        Self {
+            mp: BTreeMap::new(),
+        }
+    }
+    pub fn add_cmd(&mut self, cmd: &str, dir: &str, time: usize) {
         match self.mp.get_mut(cmd) {
             Some(cd) => {
                 cd.add_dir(dir, time);
+                cd.hits += 1;
             }
-            None => {}
+            None => {
+                let mut cd = CommandData::new();
+                cd.hits += 1;
+                cd.add_dir(dir, time);
+                self.mp.insert(cmd.to_string(), cd);
+            }
         }
     }
 
@@ -62,6 +76,15 @@ impl HistoryStore {
 }
 
 impl CommandData {
+    fn new() -> Self {
+        CommandData {
+            paths: BTreeMap::new(),
+            changed: false,
+            recent: 0,
+            hits: 0,
+        }
+    }
+
     fn write_to<W: Write>(&mut self, w: &mut W, cmd: &str, clean: bool) -> std::io::Result<()> {
         if !clean && !self.changed {
             return Ok(());
@@ -74,7 +97,7 @@ impl CommandData {
         Ok(())
     }
 
-    fn add_dir(&mut self, dir: &str, time: u64) {
+    fn add_dir(&mut self, dir: &str, time: usize) {
         self.changed = true;
         match self.paths.get_mut(dir) {
             Some(it) => {
@@ -126,8 +149,30 @@ fn quoted(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use std::io::Write;
+
     #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
+    fn multi_test() {
+        let mut h_store = HistoryStore::new();
+        h_store.add_cmd("do_1", "/home", 10);
+        h_store.add_cmd("do_2", "/park", 10);
+        h_store.add_cmd("do_1", "/car", 10);
+        h_store.add_cmd("do_1", "/home", 10);
+
+        let mut v: Vec<u8> = Vec::new();
+
+        h_store.write_to(&mut v, false).expect("Writing error");
+
+        h_store.add_cmd("do_1", "/home", 12);
+
+        h_store.write_to(&mut v, false).expect("Writing error");
+
+        let s = String::from_utf8(v).unwrap();
+
+        let mut h_load = HistoryStore::new();
+        parse::parse_onto(&mut h_load, &s).expect("Parse OK");
+
+        assert_eq!(h_load, h_store);
     }
 }
