@@ -25,7 +25,7 @@ pub fn top_n<T, F: Fn(&T, &T) -> Ordering>(v: &mut [T], n: usize, f: &F) {
         }
     }
     top_n(&mut v[..i], n, f);
-    if i < n && i + 1 < v.len() {
+    if i < n + 1 && i + 1 < v.len() {
         top_n(&mut v[(i + 1)..], n - i, f);
     }
 }

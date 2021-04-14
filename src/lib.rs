@@ -2,30 +2,44 @@ pub mod parse;
 pub mod sort;
 
 pub mod command_list;
-use command_list::CommandList;
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::ops::Bound;
 use str_tools::traits::*;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct HistoryStore {
     mp: BTreeMap<String, CommandData>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct CommandData {
     paths: BTreeMap<String, HistoryItem>,
     changed: bool,
-    recent: usize,
+    recent: u64,
     hits: usize,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct HistoryItem {
     changed: bool,
-    recent: usize,
+    recent: u64,
     hits: usize,
+}
+
+pub fn now() -> u64 {
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::from_secs(0))
+        .as_secs()
+}
+
+pub fn here() -> String {
+    match std::env::current_dir() {
+        Ok(p) => p.display().to_string(),
+        Err(_) => String::new(),
+    }
 }
 
 impl HistoryStore {
@@ -34,15 +48,19 @@ impl HistoryStore {
             mp: BTreeMap::new(),
         }
     }
-    pub fn add_cmd(&mut self, cmd: &str, dir: &str, time: usize) {
+    pub fn add_cmd(&mut self, cmd: &str, dir: &str, time: u64) {
         match self.mp.get_mut(cmd) {
             Some(cd) => {
+                if time > cd.recent {
+                    cd.recent = time;
+                }
                 cd.add_dir(dir, time);
                 cd.hits += 1;
             }
             None => {
                 let mut cd = CommandData::new();
                 cd.hits += 1;
+                cd.recent = time;
                 cd.add_dir(dir, time);
                 self.mp.insert(cmd.to_string(), cd);
             }
@@ -56,9 +74,9 @@ impl HistoryStore {
         Ok(())
     }
 
-    pub fn complete<'a>(&'a self, pcmd: &str, dir: &str) -> CommandList<'a> {
+    pub fn complete<'a>(&'a self, pcmd: &str, dir: &str, n: usize) -> Vec<String> {
         if pcmd == "" {
-            return command_list::build_command_list((&self.mp).into_iter(), dir);
+            return command_list::top_n_commands((&self.mp).into_iter(), dir, 1);
         }
         //Calculate last valid entry
         let mut c_end = pcmd.to_string();
@@ -67,10 +85,11 @@ impl HistoryStore {
             .and_then(|c| std::char::from_u32((c as u32) + 1))
             .unwrap_or('z');
         c_end.push(cnext);
-        command_list::build_command_list(
+        command_list::top_n_commands(
             self.mp
                 .range::<str, _>((Bound::Included(pcmd), Bound::Excluded(c_end.as_str()))),
             dir,
+            n,
         )
     }
 }
@@ -97,7 +116,7 @@ impl CommandData {
         Ok(())
     }
 
-    fn add_dir(&mut self, dir: &str, time: usize) {
+    fn add_dir(&mut self, dir: &str, time: u64) {
         self.changed = true;
         match self.paths.get_mut(dir) {
             Some(it) => {
@@ -159,12 +178,16 @@ mod tests {
         h_store.add_cmd("do_2", "/park", 10);
         h_store.add_cmd("do_1", "/car", 10);
         h_store.add_cmd("do_1", "/home", 10);
+        h_store.add_cmd("stop_3", "/home", 11);
+        h_store.add_cmd("hello", "/home", 13);
+        h_store.add_cmd("help", "/home", 14);
 
         let mut v: Vec<u8> = Vec::new();
 
         h_store.write_to(&mut v, false).expect("Writing error");
 
-        h_store.add_cmd("do_1", "/home", 12);
+        h_store.add_cmd("do_1", "/home", 16);
+        h_store.add_cmd("hero", "/home", 17);
 
         h_store.write_to(&mut v, false).expect("Writing error");
 
@@ -174,5 +197,8 @@ mod tests {
         parse::parse_onto(&mut h_load, &s).expect("Parse OK");
 
         assert_eq!(h_load, h_store);
+
+        let complete = h_store.complete("he", "/home", 2);
+        assert_eq!(complete, ["hero", "help"]);
     }
 }

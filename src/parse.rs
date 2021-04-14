@@ -4,7 +4,7 @@ use bogobble::*;
 #[derive(Debug)]
 pub enum Item {
     Hits(usize),
-    Recent(usize),
+    Recent(u64),
     Path(String),
     Cmd(String),
 }
@@ -16,7 +16,7 @@ parser! {(File->Vec<Item>)
 parser! {(PItem->Item)
     or!(
         ("h",common::UInt).map(|(_,n)|Item::Hits(n)),
-        ("r",common::UInt).map(|(_,n)|Item::Recent(n)),
+        ("r",common::UInt).map(|(_,n)|Item::Recent(n as u64)),
         ("p",Quoted).map(|(_,s)|Item::Path(s)),
         ("c",Quoted).map(|(_,s)|Item::Cmd(s)),
     )
@@ -62,17 +62,21 @@ pub fn read_to_command<I: Iterator<Item = Item>>(
                 hits = h;
             }
             Item::Recent(r) => recent = r,
-            Item::Path(p) => match cd.paths.insert(
-                p,
-                HistoryItem {
-                    changed: false,
-                    recent,
-                    hits,
-                },
-            ) {
-                Some(d) => cd.hits -= d.hits,
-                None => {}
-            },
+            Item::Path(p) => {
+                if recent > cd.recent {
+                    cd.recent = recent;
+                }
+                if let Some(d) = cd.paths.insert(
+                    p,
+                    HistoryItem {
+                        changed: false,
+                        recent,
+                        hits,
+                    },
+                ) {
+                    cd.hits -= d.hits;
+                }
+            }
         }
     }
     None
