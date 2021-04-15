@@ -76,7 +76,7 @@ impl HistoryStore {
 
     pub fn complete<'a>(&'a self, pcmd: &str, dir: &str, n: usize) -> Vec<String> {
         if pcmd == "" {
-            return command_list::top_n_commands((&self.mp).into_iter(), dir, 1);
+            return command_list::top_n_commands((&self.mp).into_iter(), dir, n);
         }
         //Calculate last valid entry
         let mut c_end = pcmd.to_string();
