@@ -22,9 +22,9 @@ pub struct CommandData {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct HistoryItem {
-    changed: bool,
     recent: u64,
     hits: usize,
+    r_hits: usize,
 }
 
 pub fn now() -> u64 {
@@ -121,16 +121,15 @@ impl CommandData {
         match self.paths.get_mut(dir) {
             Some(it) => {
                 it.recent = time.max(it.recent);
-                it.hits += 1;
-                it.changed = true;
+                it.r_hits += 1;
             }
             None => {
                 self.paths.insert(
                     dir.to_string(),
                     HistoryItem {
-                        changed: true,
+                        r_hits: 1,
                         recent: time,
-                        hits: 1,
+                        hits: 0,
                     },
                 );
             }
@@ -145,11 +144,13 @@ impl HistoryItem {
         path: &str,
         clean: bool,
     ) -> std::io::Result<()> {
-        if !clean && !self.changed {
+        if !clean && self.r_hits == 0 {
             return Ok(());
         }
-        self.changed = false;
-        write!(w, "r{},h{},p{}\n", self.recent, self.hits, quoted(path))
+        let res = write!(w, "r{},h{},p{}\n", self.recent, self.r_hits, quoted(path));
+        self.hits += self.r_hits;
+        self.r_hits = 0;
+        res
     }
 }
 
@@ -169,7 +170,6 @@ fn quoted(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     #[test]
     fn multi_test() {

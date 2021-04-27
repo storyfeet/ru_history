@@ -66,15 +66,19 @@ pub fn read_to_command<I: Iterator<Item = Item>>(
                 if recent > cd.recent {
                     cd.recent = recent;
                 }
-                if let Some(d) = cd.paths.insert(
-                    p,
-                    HistoryItem {
-                        changed: false,
-                        recent,
-                        hits,
-                    },
-                ) {
-                    cd.hits -= d.hits;
+                match cd.paths.get_mut(&p) {
+                    Some(hi) => {
+                        hi.hits += hits;
+                        hi.recent = recent;
+                    }
+                    None => drop(cd.paths.insert(
+                        p,
+                        HistoryItem {
+                            recent,
+                            hits,
+                            r_hits: 0,
+                        },
+                    )),
                 }
             }
         }
