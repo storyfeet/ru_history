@@ -24,7 +24,7 @@ parser! {(PItem->Item)
 
 parser! {(Quoted->String)
     ('\"',chars_until(or!(
-                ('\\','\n').asv('\n'),
+                ('\\','n').asv('\n'),
                 ('\\','"').asv('"'),
                 Any.one(),
     ),'"')).map(|(_,(b,_))|b)
