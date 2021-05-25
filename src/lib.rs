@@ -160,6 +160,7 @@ fn quoted(s: &str) -> String {
         match c {
             '\"' => res.push_str("\\\""),
             '\n' => res.push_str("\\n"),
+            '\\' => res.push_str("\\\\"),
             _ => res.push(c),
         }
     }
